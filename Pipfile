@@ -9,6 +9,7 @@ verify_ssl = true
 docopt = "*"
 schema = "*"
 openpyxl = "*"
+paramiko = "*"
 
 [requires]
 python_version = "3.8"

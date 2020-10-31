@@ -2,8 +2,9 @@ import datetime as d
 import re
 from typing import Dict, List, Any, KeysView, Tuple
 
-from .. import operation as oper
-from .. import utility as u
+from . import Server as Serv
+from .Server import ServerSettings
+from .Utility import utc_timezone, tmp_dir, datetime2doy_string
 
 
 def vex_keywords() -> Dict[str, str]:
@@ -21,37 +22,37 @@ def vex_keywords() -> Dict[str, str]:
 def time_string2time(time_string: str) -> d.datetime:
     date_tmp = d.datetime.strptime(time_string, '%Yy%jd%Hh%Mm%Ss')
     return d.datetime.combine(date_tmp.date(), date_tmp.time(),
-                              u.utc_timezone())
+                              utc_timezone())
 
 
 def vex_dir() -> str:
     return '/usr2/sched/vex'
 
 
-def get_files(today: d.datetime) -> List[Tuple[str, Any]]:
-    return get_files_between(today, today)
+def get_files(today: d.datetime, server_settings: ServerSettings) -> List[Tuple[str, Any]]:
+    return get_files_between(today, today, server_settings)
 
 
-def get_files_between(date_from: d.datetime, date_until: d.datetime
-                      ) -> List[Tuple[str, Any]]:
+def get_files_between(date_from: d.datetime, date_until: d.datetime,
+                      server_settings: ServerSettings) -> List[Tuple[str, Any]]:
     schedule_file_pattern: str = r'^(\w\d{5}\w*).vex$'
 
     def file_predicate(file_name: str) -> bool:
         if re.match(schedule_file_pattern, file_name):
-            observation_ID_string: str = re.search(
+            observation_id_string: str = re.search(
                 schedule_file_pattern, file_name).group(1)
-            return date_predicate(observation_ID_string, date_from, date_until)
+            return date_predicate(observation_id_string, date_from, date_until)
         return False
 
-    return oper.get_files(vex_dir(), u.tmp_dir(), file_predicate)
+    return Serv.get_files(vex_dir(), tmp_dir(), server_settings, file_predicate)
 
 
 def date_predicate(observation_id: str, date_from: d.datetime, date_until: d.datetime) -> bool:
-    year_doy_num_from: int = int(u.datetime2doy_string(date_from)[2:])
-    year_doy_num_until: int = int(u.datetime2doy_string(date_until)[2:])
-    ID_pattern: str = r'^\w(\d{5})\w*'
-    if re.match(ID_pattern, observation_id):
-        year_doy_num: int = int(re.search(ID_pattern, observation_id).group(1))
+    year_doy_num_from: int = int(datetime2doy_string(date_from)[2:])
+    year_doy_num_until: int = int(datetime2doy_string(date_until)[2:])
+    id_pattern: str = r'^\w(\d{5})\w*'
+    if re.match(id_pattern, observation_id):
+        year_doy_num: int = int(re.search(id_pattern, observation_id).group(1))
         return year_doy_num_from <= year_doy_num <= year_doy_num_until
     return False
 
@@ -60,7 +61,7 @@ def make_keyword_dict(keywords: List[str]) -> Dict[str, str]:
     return {vex_key: key for vex_key, key in zip(vex_keywords(), keywords)}
 
 
-def read_obs_info(file_path: str, file_stat: oper.FileStat, keywords: List[str]) -> Dict[str, str]:
+def read_obs_info(file_path: str, file_stat: Serv.FileStat, keywords: List[str]) -> Dict[str, str]:
     comment_pattern = r'^\*'
     with open(file_path, 'r', encoding="utf-8", errors='ignore') as f:
         matched_lines: List[str] = [line for line in f.readlines()
@@ -74,7 +75,7 @@ def read_obs_info(file_path: str, file_stat: oper.FileStat, keywords: List[str])
 
 
 def make_obs_list(obs_info_lines: List[List[str]],
-                  file_stat: oper.FileStat,
+                  file_stat: Serv.FileStat,
                   keyword_dict: Dict[str, str]) -> Dict[str, str]:
     def convert_value(file_keyword: str, value: str) -> str:
         if (file_keyword == 'exper_nominal_start'
@@ -109,6 +110,6 @@ def add_names(obs_list: Dict[str, str]) -> Dict[str, str]:
     return obs_list
 
 
-def add_timestamp(obs_list: Dict[str, str], file_stat: oper.FileStat) -> Dict[str, str]:
+def add_timestamp(obs_list: Dict[str, str], file_stat: Serv.FileStat) -> Dict[str, str]:
     obs_list['timestamp'] = file_stat.st_mtime
     return obs_list

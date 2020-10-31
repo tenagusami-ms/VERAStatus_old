@@ -1,40 +1,46 @@
-from typing import List, Tuple
+import dataclasses
+from typing import List, Tuple, Dict
 
 import paramiko as pa
-from my_settings.settings import vlbi_host, VlbiSettings
 
 
 FileStat = pa.SFTPAttributes
 FileWithStat = Tuple[str, FileStat]
 
 
-def ssh_setting() -> VlbiSettings:
-    return vlbi_host()
+@dataclasses.dataclass
+class ServerSettings:
+    host: str  # サーバ
+    user: str  # ユーザ名
+    password: str  # パスワード
 
 
-def get_command_output(command: str) -> List[str]:
-    host_setting: VlbiSettings = ssh_setting()
+def server_settings_dict2settings(settings_dict: Dict[str, str]):
+    return ServerSettings(settings_dict["host"], settings_dict["user"], settings_dict["password"])
+
+
+def get_command_output(command: str, server_settings: ServerSettings) -> List[str]:
     with pa.SSHClient() as ssh:
         ssh.set_missing_host_key_policy(pa.AutoAddPolicy())
         ssh.connect(
-            hostname=host_setting.ip_address,
+            hostname=server_settings.host,
             port=22,
-            username=host_setting.username,
-            password=host_setting.password)
+            username=server_settings.user,
+            password=server_settings.password)
         stdin, stdout, stderr = ssh.exec_command(command)
         return [f.split("\n")[0] for f in stdout]
 
 
 def get_files(remote_dir: str, local_dir: str,
+              server_settings: ServerSettings,
               path_predicate=lambda x: True) -> List[FileWithStat]:
-    host_setting: VlbiSettings = ssh_setting()
     with pa.SSHClient() as ssh:
         ssh.set_missing_host_key_policy(pa.AutoAddPolicy())
         ssh.connect(
-            hostname=host_setting.ip_address,
+            hostname=server_settings.host,
             port=22,
-            username=host_setting.username,
-            password=host_setting.password)
+            username=server_settings.user,
+            password=server_settings.password)
         with ssh.open_sftp() as sftp:
             try:
                 sftp.chdir(remote_dir)

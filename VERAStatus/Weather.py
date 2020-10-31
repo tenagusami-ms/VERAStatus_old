@@ -1,9 +1,9 @@
 from datetime import datetime, tzinfo
 import math
 from typing import Union, Dict, List
-from ..operation import get_command_output
-from ..log import log
-from ..utility import round_float
+from .Server import get_command_output, ServerSettings
+from . import Log
+from .Utility import round_float
 
 WeatherData = Union[str, int, float, bool, datetime]
 Weather = Dict[str, WeatherData]
@@ -62,35 +62,35 @@ def wind_direction2octas(direction_degree: float) -> str:
     return 'NW'
 
 
-def find_data(time: datetime) -> Weather:
-    data_list: List[Weather] = make_data(time)
+def find_data(time: datetime, server_settings: ServerSettings) -> Weather:
+    data_list: List[Weather] = make_data(time, server_settings)
     timedelta_array: List[tzinfo] = [abs(data['time'] - time) for data in data_list]
     min_index: int = timedelta_array.index(min(timedelta_array))
     return data_list[min_index]
 
 
-def get_data(time: datetime, keywords=None) -> Weather:
+def get_data(time: datetime, server_settings: ServerSettings, keywords=None) -> Weather:
     if keywords is None:
         keywords: List[str] = data_keywords()
-    data: Weather = find_data(time)
+    data: Weather = find_data(time, server_settings)
     return {key: value for key, value in data.items() if key in keywords}
 
 
 def make_query_command(time: datetime) -> str:
-    date_string: str = log.datetime2doy_string(time)
-    time_string: str = log.datetime2time_string(time)[0:-2]
+    date_string: str = Log.datetime2doy_string(time)
+    time_string: str = Log.datetime2time_string(time)[0:-2]
     return 'ssh clock -f "grep ' + time_string + ' /usr2/log/days/' \
         + date_string + '/' + date_string + '.WS.log |grep -v SPDNOW"'
 
 
-def get_log_lines(time: datetime) -> List[str]:
-    return get_command_output(make_query_command(time))
+def get_log_lines(time: datetime, server_settings: ServerSettings) -> List[str]:
+    return get_command_output(make_query_command(time), server_settings)
 
 
-def make_data(time: datetime) -> List[Weather]:
+def make_data(time: datetime, server_settings: ServerSettings) -> List[Weather]:
     def convert_value(item: str, value) -> WeatherData:
         if item == 'time':
-            return log.time_string2datetime(value)
+            return Log.time_string2datetime(value)
         if item == 'rain_flag':
             if float(value) == 0:
                 return False
@@ -104,7 +104,7 @@ def make_data(time: datetime) -> List[Weather]:
             return wind_direction2octas(float(value))
         return round_float(float(value), 0.1)
 
-    log_lines: List[str] = get_log_lines(time)
+    log_lines: List[str] = get_log_lines(time, server_settings)
     return [{
         item: convert_value(item, value)
         for (item, value) in zip(data_keywords(), line.split())

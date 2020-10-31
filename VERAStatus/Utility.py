@@ -1,14 +1,77 @@
 import copy
 import datetime as d
+import json
 from decimal import Decimal, ROUND_HALF_UP
 import tempfile
 from functools import reduce
-from typing import Tuple, List, TypeVar
+from typing import Tuple, List, TypeVar, Dict, Any
 
 from openpyxl import Workbook
 import asyncio
 
 T = TypeVar("T")
+
+
+class Error(Exception):
+    """
+    パッケージの例外基本クラス
+    """
+    pass
+
+
+class DataReadError(Error):
+    """
+    データ読み出し失敗の例外クラス
+    """
+    pass
+
+
+class DataWriteError(Error):
+    """
+    データ書き込み失敗の例外クラス
+    """
+    pass
+
+
+class UsageError(Error):
+    """
+    関数の使用法が誤っているエラー
+    """
+    pass
+
+
+class ProcessError(Error):
+    """
+    呼び出した実行プロセスが失敗したエラー
+    """
+    pass
+
+
+def read_json(json_file) -> Dict[str, Any]:
+    """
+    JSONファイルを読み出す
+    Args:
+        json_file: JSONファイル
+
+    Returns:
+        JSON辞書
+
+    Raises:
+        DataReadError: データ読み出し失敗
+    """
+    try:
+        with open(json_file, "r") as f:
+            return json.load(f)
+    except OSError:
+        raise DataReadError(f"data readout failed: {json_file} (module {__name__}).")
+
+
+def jst() -> d.timezone:
+    return d.timezone('Asia/Tokyo')
+
+
+def in_jst(datetime):
+    return d.timezone('Asia/Tokyo').localize(datetime)
 
 
 def utc_timezone() -> d.tzinfo:
@@ -106,3 +169,12 @@ def async_execution(tasks):
     future = asyncio.gather(*tasks)
     loop.run_until_complete(future)
     return future.result()
+
+
+def columnize(row_string, splitter):
+    return [value_string.strip() for value_string
+            in row_string.strip().split(splitter)]
+
+
+def coefficient_Torr2Pa():
+    return 101325.0/760.0

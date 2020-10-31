@@ -1,10 +1,11 @@
 from datetime import datetime
 import os
 from typing import List
-from ..log import log
-from .. import operation as oper
-from .. import utility as u
-from ..weather.weather import get_data, Weather
+from . import Log
+from . import Server as Serv
+from .Server import ServerSettings
+from .Utility import round_float, tmp_dir
+from .Weather import get_data, Weather
 
 
 def keywords() -> List[str]:
@@ -34,14 +35,14 @@ def weather_keywords() -> List[str]:
     ]
 
 
-def add_weather_data(info):
-    weather_data = get_data(info['time'], weather_keywords())
+def add_weather_data(info, server_settings: ServerSettings):
+    weather_data = get_data(info['time'], server_settings, weather_keywords())
     info.update(weather_data)
     return info
 
 
-def get(today):
-    return [add_weather_data(info) for info in read(today)]
+def get(today: datetime, server_settings: ServerSettings):
+    return [add_weather_data(info, server_settings) for info in read(today, server_settings)]
 
 
 def info_list2lines_list(info_list):
@@ -80,19 +81,19 @@ def remote_file_name(today):
     return today.strftime('%Y%j') + '.SECZ.log'
 
 
-def make_data(line: str) -> Weather:
+def make_data(line: List[str]) -> Weather:
     def convert_value(keyword: str, value: float) -> float:
         if keyword == 'optical_depth_0':
-            value = -u.round_float(value, 0.01)
+            value = -round_float(value, 0.01)
         elif not keyword == 'band':
-            value = int(u.round_float(value, 0))
+            value = int(round_float(value, 0))
         return value
 
     data_dict_tmp: Weather = {
         keyword: convert_value(keyword, value)
         for (keyword, value) in zip(keywords(), line[2].split())
     }
-    data_dict_tmp['time'] = log.time_string2datetime(line[0])
+    data_dict_tmp['time'] = Log.time_string2datetime(line[0])
     return {
         keyword: value
         for keyword, value in data_dict_tmp.items()
@@ -100,16 +101,17 @@ def make_data(line: str) -> Weather:
     }
 
 
-def read(today: datetime):
+def read(today: datetime, server_settings: ServerSettings):
     try:
         file_name: str = remote_file_name(today)
-        file_path, file_stat = oper.get_files(
-            remote_dir(today), u.tmp_dir(),
+        file_path, file_stat = Serv.get_files(
+            remote_dir(today), tmp_dir(),
+            server_settings,
             lambda fname: fname == file_name)[0]
     except (RuntimeError, IndexError):
         return []
 
-    data_keyword: str= 'TSYS1'
+    data_keyword: str = 'TSYS1'
     with open(file_path, 'r') as f:
         lines: List[List[str]] = [[
             key_value.strip().strip(";") for key_value in line.strip().split("/")

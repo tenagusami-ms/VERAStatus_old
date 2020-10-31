@@ -2,8 +2,9 @@ import datetime as d
 import os
 from typing import List, Any, Tuple, Dict, Union
 
-from . import vex as v
-from ..utility import increment_day
+from . import Vex
+from .Server import ServerSettings
+from .Utility import increment_day
 
 ObsInfo = Dict[str, Union[str, d.datetime]]
 
@@ -21,14 +22,17 @@ def keywords() -> List[str]:
     ]
 
 
-def daily_boundary_from_0hUT() -> d.timedelta:
+def daily_boundary_from_0hut() -> d.timedelta:
     return d.timedelta(hours=8)
 
 
-def read_observations(date_from: d.datetime, date_until: d.datetime) -> List[ObsInfo]:
-    transferred_file_paths_stat: List[Tuple[str, Any]] = v.get_files_between(date_from, date_until)
+def read_observations(date_from: d.datetime, date_until: d.datetime,
+                      server_settings: ServerSettings
+                      ) -> List[ObsInfo]:
+    transferred_file_paths_stat: List[Tuple[str, Any]] = \
+        Vex.get_files_between(date_from, date_until, server_settings)
     observation_info_list: List[ObsInfo] = [
-        v.read_obs_info(file_path, file_stat, keywords())
+        Vex.read_obs_info(file_path, file_stat, keywords())
         for file_path, file_stat in transferred_file_paths_stat
     ]
     for file_path, file_stat in transferred_file_paths_stat:
@@ -56,11 +60,11 @@ def filter_obs_today(obs_info_list: List[ObsInfo],
 
 
 def date_predicate(*args) -> bool:
-    return v.date_predicate(*args)
+    return Vex.date_predicate(*args)
 
 
-def get_observations(date_from: d.datetime, date_until: d.datetime):
-    obs_info_list: List[ObsInfo] = read_observations(date_from, date_until)
+def get_observations(date_from: d.datetime, date_until: d.datetime, server_settings: ServerSettings):
+    obs_info_list: List[ObsInfo] = read_observations(date_from, date_until, server_settings)
     return sort_observations(obs_info_list)
 
 
@@ -80,7 +84,7 @@ def info_list2lines_list(info_list: List[ObsInfo]) -> List[List[str]]:
     return [info2lines(info) for info in info_list]
 
 
-def display(lines_list: List[str]) -> None:
+def display(lines_list: List[List[str]]) -> None:
     print('===========\n  Schedule\n===========')
     for lines in lines_list:
         for line in lines:
