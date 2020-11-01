@@ -1,15 +1,22 @@
-import copy
-import datetime as d
-import json
-from decimal import Decimal, ROUND_HALF_UP
-import tempfile
-from functools import reduce
-from typing import Tuple, List, TypeVar, Dict, Any
+"""
+Utilityモジュール
 
-from openpyxl import Workbook
+各種ユーティリティ関数
+"""
+from __future__ import annotations
+import json
+import re
+from datetime import timezone, tzinfo, timedelta, datetime
+from decimal import Decimal, ROUND_HALF_UP
+from functools import reduce
+from typing import Tuple, List, TypeVar, Dict, Any, Union
 import asyncio
 
 T = TypeVar("T")
+
+JST: tzinfo = timezone(timedelta(hours=9), "JST")  # JSTのtzinfo
+UTC: tzinfo = timezone(timedelta(0), "UTC")  # UTCのtzinfo
+Torr2PaCoefficient: float = 101325.0/760.0
 
 
 class Error(Exception):
@@ -66,115 +73,171 @@ def read_json(json_file) -> Dict[str, Any]:
         raise DataReadError(f"data readout failed: {json_file} (module {__name__}).")
 
 
-def jst() -> d.timezone:
-    return d.timezone('Asia/Tokyo')
+def in_jst(date_time: datetime) -> datetime:
+    """
+    時刻をJSTに変換
+    Args:
+        date_time(datetime.datetime): 時刻
+
+    Returns:
+        JST時刻(datetime.datetime)
+    """
+    if date_time.tzinfo is None:
+        raise UsageError(f"time zone is not specified in the datetime object "
+                         + f"to be converted to JST (module {__name__}).")
+    return date_time.astimezone(JST)
 
 
-def in_jst(datetime):
-    return d.timezone('Asia/Tokyo').localize(datetime)
+def incremented_day(day: datetime) -> datetime:
+    """
+    日を一日すすめる
+    Args:
+        day(datetime.datetime): 時刻
+
+    Returns:
+        一日後の同時刻(datetime.datetime)
+    """
+    return day + timedelta(days=1)
 
 
-def utc_timezone() -> d.tzinfo:
-    return d.timezone(d.timedelta(0))
+def decremented_day(day: datetime) -> datetime:
+    """
+    日を一日遅らせるすすめる
+    Args:
+        day(datetime.datetime): 時刻
+
+    Returns:
+        一日前の同時刻(datetime.datetime)
+    """
+    return day + timedelta(days=-1)
 
 
-def tmp_dir():
-    return tempfile.gettempdir()
+def round_float(r: Union[int, float], order: int) -> Union[int, float]:
+    """
+    実数rを、10進でorderの桁まで四捨五入。
+    orderが0.1を超えたら整数を返す。
+    Args:
+        r(float): 実数
+        order(int): 基準の桁
 
-
-def increment_day(day) -> d.datetime:
-    return day + d.timedelta(days=1)
-
-
-def decrement_day(day) -> d.datetime:
-    return day + d.timedelta(days=-1)
-
-
-def round_float(r: float, order: float) -> float:
-    rounded: Decimal = Decimal(float(r)).quantize(
-        Decimal(str(order)), rounding=ROUND_HALF_UP)
-    if order > 0.1:
+    Returns:
+        四捨五入された実数(Union[int, float])
+    """
+    relative_error_tolerance: float = 1.e-15
+    rounded: Decimal = Decimal(float(r) * (1.0 + relative_error_tolerance))\
+        .quantize(pow(Decimal("10"), order), rounding=ROUND_HALF_UP)
+    if order >= 0:
         return int(rounded)
     return float(rounded)
 
 
-def doy2datetime(year: int, doy: int) -> d.datetime:
-    return doy_string2datetime(str(year)+str(doy))
+def doy2datetime(year: int, doy: int) -> datetime:
+    """
+    年と通日からUTCで00:00の時刻を持つdatetimeオブジェクトにする。
+    Args:
+        year(int): 年
+        doy(int): 通日
+
+    Returns:
+        datetimeオブジェクト
+    """
+    return doy_string2datetime(str(year)+str(doy).zfill(3))
 
 
-def doy_string2datetime(doy_string) -> d.datetime:
-    date_tmp: d.datetime = d.datetime.strptime(doy_string + '+0000', '%Y%j%z')
-    return datetime_at_0h(datetime2utc(date_tmp))
+def doy_string2datetime(doy_string: str) -> datetime:
+    """
+        年と通日の文字列(YYYYJJJ)からUTCで00:00の時刻を持つdatetimeオブジェクトにする。
+        Args:
+            doy_string(str): YYYYJJJの形の、年・通日の文字列。
+
+        Returns:
+            datetimeオブジェクト
+
+        Raises:
+            UsageError: 入力文字列がYYYYJJJの形でない。
+        """
+    if re.match(r"\d{7}", doy_string) is None:
+        raise UsageError(f"input string {doy_string} cannot be converted to datetime (module {__name__}).")
+    return datetime.strptime(doy_string + '000000+0000', '%Y%j%H%M%S%z')
 
 
-def datetime2year_doy_string(today: d.datetime) -> Tuple[str, str]:
-    return today.strftime('%Y'), today.strftime('%j')
+def datetime2year_doy_string(date_time: datetime) -> Tuple[str, str]:
+    """
+    datetimeオブジェクトから、そのオブジェクトの時刻が入る、年と通日の文字列を返す。
+    Args:
+        date_time(datetime): datetimeオブジェクト
+
+    Returns:
+        年と通日の文字列(Tuple[str, str])
+    """
+    return date_time.strftime('%Y'), date_time.strftime('%j')
 
 
-def datetime2year_doy(today: d.datetime) -> Tuple[int, int]:
-    return today.year, int(today.strftime('%j'))
+def datetime2year_doy(date_time: datetime) -> Tuple[int, int]:
+    """
+        datetimeオブジェクトから、そのオブジェクトの時刻が入る、年と通日を返す。
+        Args:
+            date_time(datetime): datetimeオブジェクト
+
+        Returns:
+            年と通日(Tuple[int, int])
+        """
+    return date_time.year, int(date_time.strftime('%j'))
 
 
-def datetime2doy_string(today: d.datetime) -> str:
-    year, doy = datetime2year_doy_string(today)
+def datetime2doy_string(date_time: datetime) -> str:
+    """
+    datetimeオブジェクトから、そのオブジェクトの時刻が入る、年と通日のYYYYJJJ形の文字列を返す。
+    Args:
+        date_time(datetime): datetimeオブジェクト
+
+    Returns:
+        年と通日の文字列(str)
+    """
+    year, doy = datetime2year_doy_string(date_time)
     return year + doy
 
 
-def datetime2doy(today: d.datetime) -> int:
-    return int(today.strftime('%j'))
+def datetime2doy(date_time: datetime) -> int:
+    """
+    datetimeオブジェクトから、そのオブジェクトの時刻が入る、通日を返す。
+    Args:
+        date_time(datetime): datetimeオブジェクト
+
+    Returns:
+        通日(int)
+    """
+    return int(date_time.strftime('%j'))
 
 
 def string_lines2string(string_lines: List[str]) -> str:
+    """
+    文字列リストを、改行で結合された１つの文字列にする。
+    Args:
+        string_lines(List[str]): 文字列リスト
+
+    Returns:
+        1つの文字列(str)
+    """
     return reduce(lambda ss, s: ss + s + '\n', string_lines, '')
 
 
-def get_now() -> d.datetime:
-    date_tmp: d.datetime = d.datetime.now(d.timezone.utc)
-    return datetime2utc(date_tmp)
-
-
-def is_offset_naive_datetime(datetime_obj: d.datetime) -> bool:
-    return not datetime_obj.tzinfo
-
-
-def datetime2utc(date_tmp: d.datetime) -> d.datetime:
-    if date_tmp.tzinfo != d.timezone.utc:
-        return date_tmp.astimezone(d.timezone.utc)
-    return date_tmp
-
-
-def datetime_at_0h(date_tmp) -> d.datetime:
-    return d.datetime(
-        date_tmp.year, date_tmp.month, date_tmp.day, tzinfo=date_tmp.tzinfo)
-
-
-def make_out_data_matrix(title_row, in_data_matrix: List[List[T]]):
-    # out_matrix = [[row[item] for item in title_row] for row in in_data_matrix]
-    out_matrix: List[List[T]] = copy.deepcopy(in_data_matrix)
-    out_matrix.insert(0, title_row)
-    return out_matrix
-
-
-def excel_file_out(file_path: str, sheet_title: str, data_matrix: List[List[T]]) -> None:
-    wb = Workbook()
-    ws = wb.active
-    ws.title = sheet_title
-    for data_row in data_matrix:
-        ws.append(data_row)
-    wb.save(file_path)
+def get_now() -> datetime:
+    """
+    現在のUTC時刻
+    Returns:
+        時刻(datetime.datetime)
+    """
+    return datetime.now(tz=UTC)
 
 
 def async_execution(tasks):
+    """
+    タスクの非同期実行
+    Args:
+        tasks(List[Callable]): タスクのリスト
+    """
     loop = asyncio.get_event_loop()
     future = asyncio.gather(*tasks)
     loop.run_until_complete(future)
     return future.result()
-
-
-def columnize(row_string, splitter):
-    return [value_string.strip() for value_string
-            in row_string.strip().split(splitter)]
-
-
-def coefficient_Torr2Pa():
-    return 101325.0/760.0

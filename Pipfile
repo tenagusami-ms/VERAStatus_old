@@ -10,6 +10,7 @@ docopt = "*"
 schema = "*"
 openpyxl = "*"
 paramiko = "*"
+pytest = "*"
 
 [requires]
 python_version = "3.8"

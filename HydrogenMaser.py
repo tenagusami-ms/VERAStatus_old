@@ -1,88 +1,85 @@
-import datetime as d
-from .VERAStatus import HydrogenMaserServer as s
-import my_utilities.utilities as u
+"""Overview:
+    HydrogenMaser.py : get the status of the hydrogen maser
+
+Usage:
+    HydrogenMaser.py [--setting file]
+
+    HydrogenMaser.py -h | --help
+
+Options:
+    --setting file  : the path to the setting file
+    -h --help       : Show this screen and exit.
+
+"""
+import dataclasses
+import sys
+from datetime import date, time, datetime
+import pathlib as p
+from typing import Dict, Any
+
+from docopt import docopt
+from schema import Schema, Or, And, Use, SchemaError
+
+from VERAStatus.HydrogenMaserServer import report_parameters, get, MaserSettings, read_settings
+from VERAStatus.Utility import in_jst, Error, DataReadError, read_json
 
 
-def status_parameters():
-    return [
-        {'label': 'total_days_from_19000101',
-         'accuracy': 0, 'unit': 'days'},
-        {'label': 'time', 'accuracy': 0, 'unit': ''},
-        {'label': 'temperature_cavity',
-         'accuracy': 0.001, 'unit': 'Cdeg'},
-        {'label': 'temperature_shield1_main',
-         'accuracy': 0.001, 'unit': 'Cdeg'},
-        {'label': 'temperature_shield2_lower',
-         'accuracy': 0.001, 'unit': 'Cdeg'},
-        {'label': 'temperature_shield3_upper',
-         'accuracy': 0.001, 'unit': 'Cdeg'},
-        {'label': 'temperature_shield3_main',
-         'accuracy': 0.001, 'unit': 'Cdeg'},
-        {'label': 'temperature_shield3_lower',
-         'accuracy': 0.001, 'unit': 'Cdeg'},
-        {'label': 'temperature_electronics',
-         'accuracy': 0.001, 'unit': 'Cdeg'},
-        {'label': 'temperature_room',
-         'accuracy': 0.001, 'unit': 'Cdeg'},
-        {'label': 'H_pressure_source_kPa',
-         'accuracy': 0.001, 'unit': 'kPa'},
-        {'label': 'H_pressure_cell',
-         'accuracy': 0.01, 'unit': 'Pa', 'daily_report_index': 2},
-        {'label': 'dissociate_intensity',
-         'accuracy': 1, 'unit': '', 'daily_report_index': 1},
-        {'label': 'OCXO_control_voltage',
-         'accuracy': 0.01, 'unit': 'V', 'daily_report_index': 5},
-        {'label': 'maser_RX_level',
-         'accuracy': 0.1, 'unit': 'dBm', 'daily_report_index': 4},
-        {'label': 'cavity_IF_level',
-         'accuracy': 0.001, 'unit': 'V'},
-        {'label': 'cavity_automatic_tube_error_voltage',
-         'accuracy': 0.001, 'unit': 'V'},
-        {'label': 'varicap_voltage',
-         'accuracy': 0.01, 'unit': 'V', 'daily_report_index': 3},
-        {'label': 'ion_pump_current',
-         'accuracy': 0.001, 'unit': 'mA', 'daily_report_index': 0},
-        {'label': 'ion_pump_voltage',
-         'accuracy': 0.001, 'unit': 'kV'},
-        {'label': 'dissociation_drive_current',
-         'accuracy': 0.0001, 'unit': 'A'},
-        {'label': 'battery_voltage',
-         'accuracy': 0.001, 'unit': 'V'},
-        {'label': 'battery_current',
-         'accuracy': 0.0001, 'unit': 'A', 'daily_report_index': 6},
-        {'label': 'battery_charge_voltage',
-         'accuracy': 0.001, 'unit': 'V'},
-        {'label': 'power_supply_voltage+24',
-         'accuracy': 0.001, 'unit': 'V'},
-        {'label': 'power_supply_voltage+12',
-         'accuracy': 0.001, 'unit': 'V'},
-        {'label': 'power_supply_voltage-12',
-         'accuracy': 0.001, 'unit': 'V'},
-        {'label': 'power_analog_supply_voltage+5',
-         'accuracy': 0.001, 'unit': 'V'},
-        {'label': 'power_digital_supply_voltage+5',
-         'accuracy': 0.001, 'unit': 'V'},
-        {'label': 'power_supply_voltage+3.3',
-         'accuracy': 0.001, 'unit': 'V'},
-        {'label': 'reserve',
-         'accuracy': 0.001, 'unit': 'Cdeg'},
-    ]
+def main() -> None:
+    """
+    Main Procedure
+    """
+    try:
+        options: Options = read_options()
+        settings: MaserSettings = \
+            read_settings(read_json(options.setting_file)["H_maser_settings"])
+
+        status = get(settings, in_jst(datetime.combine(date.today(), time())))
+        for param in report_parameters():
+            print(param['label'] + ':',
+                  status[-1][param['label']], param['unit'])
+
+    except Error as e:
+        print(e.args[0])
+        sys.exit(1)
 
 
-def report_parameters():
-    report_params = \
-        filter(lambda x: x.get('daily_report_index') is not None,
-               status_parameters())
-    return sorted(report_params, key=lambda x: x['daily_report_index'])
+@dataclasses.dataclass
+class Options:
+    """
+    オプション格納
+    """
+    setting_file: p.Path
 
 
-def get(date_from, date_until=u.in_JST(d.datetime.now())):
-    return s.get_status(date_from, date_until)
+def read_options() -> Options:
+    """
+    コマンドラインオプションの設定を読む。
+
+    Returns:
+        オプション設定(Options)
+    """
+    args: Dict[str, Any] = docopt(__doc__)
+    schema = Schema({
+        "--setting": Or(None, And(Use(p.Path), lambda path: path.is_file(),
+                                  error=f"The specified file {args['--setting']}"
+                                        + " does not exist.\n")),
+    })
+
+    try:
+        args = schema.validate(args)
+        if args["--setting"] is None:
+            default_setting: p.Path = p.Path(__file__).parent.parent / "work" / "settings.json"
+            if not default_setting.is_file():
+                raise DataReadError(f"The default setting file {default_setting} does not exist.")
+            args["--setting"] = default_setting
+
+    except SchemaError as e:
+        print(e.args[0])
+        exit(1)
+
+    return Options(args["--setting"])
 
 
 if __name__ == '__main__':
-
-    status = get(u.in_JST(d.datetime.combine(d.date.today(), d.time())))
-    for param in report_parameters():
-        print(param['label'] + ':',
-              status[-1][param['label']], param['unit'])
+    main()
+    sys.exit(0)

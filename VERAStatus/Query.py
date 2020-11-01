@@ -1,3 +1,8 @@
+"""
+Query モジュール
+
+データ要求に対する提供先を振り分ける
+"""
 from __future__ import annotations
 
 import asyncio

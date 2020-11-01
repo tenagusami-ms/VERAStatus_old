@@ -4,7 +4,7 @@ from typing import List, Any, Tuple, Dict, Union
 
 from . import Vex
 from .Server import ServerSettings
-from .Utility import increment_day
+from .Utility import incremented_day
 
 ObsInfo = Dict[str, Union[str, d.datetime]]
 
@@ -49,7 +49,7 @@ def filter_obs_today(obs_info_list: List[ObsInfo],
                      time_delta: d.timedelta = d.timedelta(hours=0)
                      ) -> List[ObsInfo]:
     schedule_boundary_today: d.datetime = today + time_delta
-    schedule_boundary_tomorrow: d.datetime = increment_day(schedule_boundary_today)
+    schedule_boundary_tomorrow: d.datetime = incremented_day(schedule_boundary_today)
 
     def is_observation_today(info):
         return (info['start_time'] <= schedule_boundary_tomorrow

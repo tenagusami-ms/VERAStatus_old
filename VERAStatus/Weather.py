@@ -84,7 +84,7 @@ def make_query_command(time: datetime) -> str:
 
 
 def get_log_lines(time: datetime, server_settings: ServerSettings) -> List[str]:
-    return get_command_output(make_query_command(time), server_settings)
+    return get_command_output(server_settings, make_query_command(time))
 
 
 def make_data(time: datetime, server_settings: ServerSettings) -> List[Weather]:
@@ -102,7 +102,7 @@ def make_data(time: datetime, server_settings: ServerSettings) -> List[Weather]:
             return int(round_float(float(value), 0))
         if item == 'wind_direction':
             return wind_direction2octas(float(value))
-        return round_float(float(value), 0.1)
+        return round_float(float(value), -1)
 
     log_lines: List[str] = get_log_lines(time, server_settings)
     return [{

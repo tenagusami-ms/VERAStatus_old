@@ -4,7 +4,7 @@ from typing import List
 from . import Log
 from . import Server as Serv
 from .Server import ServerSettings
-from .Utility import round_float, tmp_dir
+from .Utility import round_float
 from .Weather import get_data, Weather
 
 
@@ -84,7 +84,7 @@ def remote_file_name(today):
 def make_data(line: List[str]) -> Weather:
     def convert_value(keyword: str, value: float) -> float:
         if keyword == 'optical_depth_0':
-            value = -round_float(value, 0.01)
+            value = -round_float(value, -2)
         elif not keyword == 'band':
             value = int(round_float(value, 0))
         return value
@@ -104,10 +104,9 @@ def make_data(line: List[str]) -> Weather:
 def read(today: datetime, server_settings: ServerSettings):
     try:
         file_name: str = remote_file_name(today)
-        file_path, file_stat = Serv.get_files(
-            remote_dir(today), tmp_dir(),
-            server_settings,
-            lambda fname: fname == file_name)[0]
+        file_path, file_stat = Serv.download_files(
+            server_settings, remote_dir(today),
+            path_predicate=lambda fname: fname == file_name)[0]
     except (RuntimeError, IndexError):
         return []
 
