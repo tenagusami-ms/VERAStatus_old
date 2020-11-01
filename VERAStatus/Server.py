@@ -82,7 +82,7 @@ def download_files(server_settings: ServerSettings,
         server_settings(ServerSettings): サーバ設定
         remote_directory(pathlib.PurePath): リモートディレクトリ
         local_directory (pathlib.Path, optional): ローカルディレクトリ。デフォルトはOSのテンポラリディレクトリ。
-        path_predicate(Callable[[p.Path], bool], optional): ファイル名フィルタ関数。デフォルトはTrueの定数関数。
+        path_predicate(Callable[[p.PurePath], bool], optional): ファイル名フィルタ関数。デフォルトはTrueの定数関数。
 
     Returns:
         ダウンロードしたファイル情報(List[FileWithStat])
@@ -99,9 +99,9 @@ def download_files(server_settings: ServerSettings,
                 username=server_settings.user,
                 password=server_settings.password)
             with ssh.open_sftp() as sftp:
-                sftp.chdir(remote_directory)
+                sftp.chdir(str(remote_directory))
                 remote_file_names: List[str] = [p.PurePath(file).name for file in sftp.listdir()
-                                                if path_predicate(file)]
+                                                if path_predicate(p.PurePath(file))]
                 downloaded_files: List[FileWithStat] = []
                 for remote_file_name in remote_file_names:
                     local_file: p.Path = local_directory / remote_file_name

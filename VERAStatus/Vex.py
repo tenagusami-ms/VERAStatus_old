@@ -1,106 +1,163 @@
-import datetime as d
+"""
+Vexモジュール
+
+vexスケジュールファイルから必要な情報を抜き出す。
+"""
+from __future__ import annotations
+
 import re
-from typing import Dict, List, KeysView
+from datetime import datetime, date
+import pathlib as p
+from typing import Dict, List, Union, Any, Optional, Match
 
+from .ObservationInfo import ObservationInfo
 from .Server import ServerSettings, download_files, FileStat, FileWithStat
-from .Utility import datetime2doy_string, UTC
+from .Utility import UTC
 
 
-def vex_keywords() -> Dict[str, str]:
+def vex_file_keywords() -> Dict[str, str]:
+    """
+    ObservationInfoクラス要素と、vexでのキーワードの対応の辞書
+    Returns:
+        対応辞書(Dict[str, str])
+    """
     return {
-        'exper_name': 'observation_ID',
-        'exper_description': 'description',
-        'exper_nominal_start': 'start_time',
-        'exper_nominal_stop': 'end_time',
+        'observation_ID': 'exper_name',
+        'description': 'exper_description',
+        'start_time': 'exper_nominal_start',
+        'end_time': 'exper_nominal_stop',
         'PI_name': 'PI_name',
         'contact_name': 'contact_name',
-        'ref $IF': 'band',
+        'band': 'ref $IF'
     }
 
 
-def time_string2time(time_string: str) -> d.datetime:
-    date_tmp = d.datetime.strptime(time_string, '%Yy%jd%Hh%Mm%Ss')
-    return d.datetime.combine(date_tmp.date(), date_tmp.time(), UTC)
+def download_files_between(date_start: datetime, date_end: datetime,
+                           server_settings: ServerSettings) -> List[FileWithStat]:
+    """
+    指定された期間の日の間にある観測ファイルをサーバからダウンロードし、
+    それらのファイル情報を返す。
 
+    Note:
+        期間終了日は含まない。
 
-def get_files_between(date_from: d.datetime, date_until: d.datetime,
-                      server_settings: ServerSettings) -> List[FileWithStat]:
-    schedule_file_pattern: str = r'^(\w\d{5}\w*).vex$'
+    Args:
+        date_start(datetime.datetime): 期間開始日の任意の時刻
+        date_end(datetime.datetime): 期間終了日の任意の時刻
+        server_settings(ServerSettings): サーバ設定
 
-    def file_predicate(file_name: str) -> bool:
-        if re.match(schedule_file_pattern, file_name):
-            observation_id_string: str = re.search(
-                schedule_file_pattern, file_name).group(1)
-            return date_predicate(observation_id_string, date_from, date_until)
-        return False
-
+    Returns:
+        ダウンロードしたファイルの情報(List[FileWithStat])
+    """
     return download_files(server_settings, server_settings.schedule_directory,
-                          path_predicate=file_predicate)
+                          path_predicate=lambda f: date_predicate(f, date_start.date(), date_end.date()))
 
 
-def date_predicate(observation_id: str, date_from: d.datetime, date_until: d.datetime) -> bool:
-    year_doy_num_from: int = int(datetime2doy_string(date_from)[2:])
-    year_doy_num_until: int = int(datetime2doy_string(date_until)[2:])
-    id_pattern: str = r'^\w(\d{5})\w*'
-    if re.match(id_pattern, observation_id):
-        year_doy_num: int = int(re.search(id_pattern, observation_id).group(1))
-        return year_doy_num_from <= year_doy_num <= year_doy_num_until
-    return False
+def date_predicate(file: p.PurePath, date_start: date, date_end: date) -> bool:
+    """
+    観測ファイル名からわかる観測開始日が、指定された期間の日の間にあるかどうか
+    Args:
+        file(pathlib.PurePath): 観測ファイルパス
+        date_start(datetime.datetime): 期間開始日の任意の時刻
+        date_end(datetime.datetime): 期間終了日の任意の時刻
+
+    Returns:
+        期間開始時刻の日(date_from.date)<=観測名の日<期間終了時刻の日(date_end.date)ならTrue(bool)
+        期間終了時刻の日は含まない。
+    """
+    try:
+        observation_date = datetime.strptime(f"20{file.name[1:6]}", "%Y%j").date()
+    except ValueError:
+        return False
+    return file.suffix == ".vex" and date_start <= observation_date < date_end
 
 
-def make_keyword_dict(keywords: List[str]) -> Dict[str, str]:
-    return {vex_key: key for vex_key, key in zip(vex_keywords(), keywords)}
+def make_observation_info(vex_file: p.Path, file_stat: FileStat) -> ObservationInfo:
+    """
+    vexファイルから、必要な観測情報が含まれる行の、キー・値ペアリストを抜き出す。
+    Args:
+        vex_file(p.Path): vexファイル
+        file_stat(FileStat): ファイル情報
+
+    Returns:
+        キー・値ペアリスト(Dict[str, str])
+    """
+    with open(vex_file, 'r', encoding="utf-8", errors='ignore') as f:
+        vex_file_lines: List[str] = f.readlines()
+    obs_info_lines: Dict[str, Any] = extract_obs_info(vex_file_lines)
+    return vex_lines2observation_info(obs_info_lines, file_stat)
 
 
-def read_obs_info(file_path: str, file_stat: FileStat, keywords: List[str]) -> Dict[str, str]:
+def extract_obs_info(vex_file_lines: List[str]) -> Dict[str, Any]:
+    """
+    vexファイルの行リストから、必要な観測情報が含まれる行の、キー・値の辞書を抜き出す。
+    Args:
+        vex_file_lines (List[str]): vexファイルの行リスト
+
+    Returns:
+        キー・値の辞書(Dict[str, Any])
+    """
     comment_pattern = r'^\*'
-    with open(file_path, 'r', encoding="utf-8", errors='ignore') as f:
-        matched_lines: List[str] = [line for line in f.readlines()
-                                    if not re.match(comment_pattern, line)]
-        lines: List[List[str]] = [[key_value.strip().strip(";") for key_value
-                                   in line.strip().split("=", 1)]
-                                  for line in matched_lines]
-        obs_info_lines: List[List[str]] = [line for line in lines if line[0] in vex_keywords()]
-        return make_obs_list(obs_info_lines, file_stat,
-                             make_keyword_dict(keywords))
+    vex_lines: List[str] = [line for line in vex_file_lines
+                            if not re.match(comment_pattern, line)]
+    key_values: List[List[str]] = [[key_value.strip().strip(";") for key_value
+                                    in line.strip().split("=", 1)]
+                                   for line in vex_lines]
+    return {key: value for key, value in key_values if key in vex_file_keywords().values()}
 
 
-def make_obs_list(obs_info_lines: List[List[str]],
-                  file_stat: FileStat,
-                  keyword_dict: Dict[str, str]) -> Dict[str, str]:
-    def convert_value(file_keyword: str, value: str) -> str:
-        if (file_keyword == 'exper_nominal_start'
-                or file_keyword == 'exper_nominal_stop'):
-            value = time_string2time(value)
-        elif file_keyword == 'ref $IF':
-            band_pattern = r'^IF_([\w])+:'
-            if re.match(band_pattern, value):
-                value = re.search(band_pattern, value).group(1)
-            else:
-                value = 'unknown'
-        return value
+def time_string2datetime(time_string: str) -> datetime:
+    """
+    vexファイル内の時刻記述をdatetimeオブジェクトに変換
+    Args:
+        time_string(str): UTCでの時刻記述。例えば"2020y123d08h12m34s"
 
-    obs_list: Dict[str, str] = {keyword_dict[keyword]: convert_value(keyword, value)
-                                for keyword, value in obs_info_lines}
-    return add_timestamp(add_names(obs_list), file_stat)
+    Returns:
+        datetimeオブジェクト(datetime.datetime)
+    """
+    return datetime.strptime(time_string + "+0000", '%Yy%jd%Hh%Mm%Ss%z')
 
 
-def add_names(obs_list: Dict[str, str]) -> Dict[str, str]:
-    keys_read: KeysView[str] = obs_list.keys()
+def vex_lines2observation_info(obs_info_lines: Dict[str, Any],
+                               file_stat: FileStat) -> ObservationInfo:
+    """
+    スケジュールから抜き出した観測情報辞書を、観測情報オブジェクトにする。
+    Args:
+        obs_info_lines(Dict[str, Any]): 観測情報辞書
+        file_stat(FileStat): スケジュールファイル情報
 
-    if 'PI_name' in keys_read and 'contact_name' in keys_read:
-        return obs_list
-    if 'contact_name' in keys_read:
-        obs_list['PI_name'] = obs_list['contact_name']
-        return obs_list
-    if 'PI_name' in keys_read:
-        obs_list['contact_name'] = obs_list['PI_name']
-        return obs_list
-    obs_list['contact_name'] = 'unknown'
-    obs_list['PI_name'] = obs_list['contact_name']
-    return obs_list
+    Returns:
+        観測情報(ObservationInfo)
+    """
+    def convert_value(vex_key: str) -> Union[str, datetime]:
+        if vex_key == 'exper_nominal_start' or vex_key == 'exper_nominal_stop':
+            return time_string2datetime(obs_info_lines[vex_key])
+        elif vex_key == 'ref $IF':
+            matched: Optional[Match[str]] = \
+                re.search(r"^IF_([\w]+):", obs_info_lines[vex_key])
+            if matched is None:
+                return "unknown"
+            return matched.groups()[0]
+        return obs_info_lines.get(vex_key, None)
+
+    observation_info_dict: Dict[str, Any] = \
+        {observation_key: convert_value(vex_key)
+         for observation_key, vex_key in vex_file_keywords()}
+    observation_info_dict["timestamp"] = datetime.fromtimestamp(file_stat.st_mtime, tz=UTC)
+    add_names(observation_info_dict)
+    return ObservationInfo(**observation_info_dict)
 
 
-def add_timestamp(obs_list: Dict[str, str], file_stat: FileStat) -> Dict[str, str]:
-    obs_list['timestamp'] = file_stat.st_mtime
-    return obs_list
+def add_names(observation_info_dict: Dict[str, Any]) -> None:
+    """
+    観測情報辞書にPI情報がない（＝元のスケジュールに書いてない）などの
+    特殊ケースへの対応のため、観測情報辞書のPI, コンタクト情報を修正する。
+    Args:
+        observation_info_dict(Dict[str, Any]): 観測情報辞書
+    """
+    if observation_info_dict["PI_name"] is None:
+        if observation_info_dict["contact_name"] is None:
+            observation_info_dict["contact_name"] = "unknown"
+        observation_info_dict["PI_name"] = observation_info_dict["contact_name"]
+    elif observation_info_dict["contact_name"] is None:
+        observation_info_dict["contact_name"] = observation_info_dict["PI_name"]

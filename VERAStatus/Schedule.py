@@ -1,12 +1,18 @@
-import datetime as d
+"""
+Scheduleモジュール
+
+観測スケジュール情報の一般的な扱いを行うモジュール。
+個別観測スケジュールファイルについてはVexモジュール参照。
+"""
+from __future__ import annotations
+import dataclasses
 import os
-from typing import List, Any, Tuple, Dict, Union
+from datetime import datetime
+from typing import List, Dict, Any
 
-from . import Vex
-from .Server import ServerSettings
-from .Utility import incremented_day
-
-ObsInfo = Dict[str, Union[str, d.datetime]]
+from .ObservationInfo import ObservationInfo
+from .Server import ServerSettings, FileWithStat
+from .Vex import make_observation_info, download_files_between
 
 
 def keywords() -> List[str]:
@@ -22,64 +28,38 @@ def keywords() -> List[str]:
     ]
 
 
-def daily_boundary_from_0hut() -> d.timedelta:
-    return d.timedelta(hours=8)
-
-
-def read_observations(date_from: d.datetime, date_until: d.datetime,
-                      server_settings: ServerSettings
-                      ) -> List[ObsInfo]:
-    transferred_file_paths_stat: List[Tuple[str, Any]] = \
-        Vex.get_files_between(date_from, date_until, server_settings)
-    observation_info_list: List[ObsInfo] = [
-        Vex.read_obs_info(file_path, file_stat, keywords())
-        for file_path, file_stat in transferred_file_paths_stat
-    ]
-    for file_path, file_stat in transferred_file_paths_stat:
+def read_observations(date_from: datetime, date_until: datetime,
+                      server_settings: ServerSettings) -> List[ObservationInfo]:
+    downloaded_file_paths_stat: List[FileWithStat] = \
+        download_files_between(date_from, date_until, server_settings)
+    observation_info_list: List[ObservationInfo] = \
+        [make_observation_info(*file_info) for file_info in downloaded_file_paths_stat]
+    for file_path, file_stat in downloaded_file_paths_stat:
         os.remove(file_path)
     return observation_info_list
 
 
-def sort_observations(obs_info_list: List[ObsInfo]) -> List[ObsInfo]:
+def sort_observations(obs_info_list: List[ObservationInfo]) -> List[ObservationInfo]:
     return sorted(obs_info_list, key=lambda info: info['start_time'])
 
 
-def filter_obs_today(obs_info_list: List[ObsInfo],
-                     today: d.datetime,
-                     time_delta: d.timedelta = d.timedelta(hours=0)
-                     ) -> List[ObsInfo]:
-    schedule_boundary_today: d.datetime = today + time_delta
-    schedule_boundary_tomorrow: d.datetime = incremented_day(schedule_boundary_today)
-
-    def is_observation_today(info):
-        return (info['start_time'] <= schedule_boundary_tomorrow
-                and info['end_time'] > schedule_boundary_today)
-
-    return [obs_info for obs_info in obs_info_list
-            if is_observation_today(obs_info)]
-
-
-def date_predicate(*args) -> bool:
-    return Vex.date_predicate(*args)
-
-
-def get_observations(date_from: d.datetime, date_until: d.datetime, server_settings: ServerSettings):
-    obs_info_list: List[ObsInfo] = read_observations(date_from, date_until, server_settings)
+def get_observations(date_from: datetime, date_until: datetime, server_settings: ServerSettings):
+    obs_info_list: List[ObservationInfo] =\
+        read_observations(date_from, date_until, server_settings)
     return sort_observations(obs_info_list)
 
 
-def info_list2lines_list(info_list: List[ObsInfo]) -> List[List[str]]:
-    def string_convert(info: ObsInfo, item: str) -> str:
-        if item == 'start_time' \
-                or item == 'end_time':
-            return item + ': ' \
-                   + info[item].astimezone().strftime('%m/%d(%jd) %H:%MJST')
-        return item + ': ' + str(info[item])
+def info_list2lines_list(info_list: List[ObservationInfo]) -> List[List[str]]:
+    def string_convert(info: ObservationInfo, item: str) -> str:
+        info_dict: Dict[str, Any] = dataclasses.asdict(info)
+        if item == 'start_time' or item == 'end_time':
+            return f"{item}: {info_dict[item].astimezone().strftime('%m/%d(%jd) %H:%MJST')}"
+        return f"{item}: {str(info_dict[item])}"
 
-    def info2lines(info: ObsInfo) -> List[str]:
+    def info2lines(info: ObservationInfo) -> List[str]:
         return [string_convert(info, item) for item in keywords()]
 
-    if not info_list:
+    if len(info_list) == 0:
         return [['no observations']]
     return [info2lines(info) for info in info_list]
 

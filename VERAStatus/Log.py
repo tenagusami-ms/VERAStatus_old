@@ -1,6 +1,6 @@
 import datetime as d
 
-from .Utility import utc_timezone
+from .Utility import UTC
 
 
 def time_string2datetime(time_string: str) -> d.datetime:
@@ -12,7 +12,7 @@ def time_string2datetime(time_string: str) -> d.datetime:
         date_tmp.hour,
         date_tmp.minute,
         date_tmp.second,
-        tzinfo=utc_timezone())
+        tzinfo=UTC)
 
 
 def datetime2doy_string(time: d.datetime) -> str:
