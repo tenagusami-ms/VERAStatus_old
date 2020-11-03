@@ -11,7 +11,7 @@ from datetime import datetime
 from . import Schedule as Sched
 from . import SecZ
 from .Server import ServerSettings
-from .Utility import doy_string2datetime, get_now, async_execution
+from .Utility import doy_string2datetime, get_now, async_execution, incremented_day
 
 
 def get_status(doy_string: str, server_settings: ServerSettings):
@@ -36,7 +36,7 @@ def get_status_today(today: datetime, server_settings: ServerSettings):
 
 
 def get_status_today_synchronous(today: datetime, server_settings: ServerSettings):
-    status = {'observation_info': Sched.get_observations(today, today, server_settings),
+    status = {'observation_info': Sched.get_observations(today, incremented_day(today), server_settings),
               'secZ_info': SecZ.get(today, server_settings)}
     # print(status)
     return status

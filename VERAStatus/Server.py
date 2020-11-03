@@ -5,9 +5,11 @@ Serverモジュール
 """
 from __future__ import annotations
 import dataclasses
+import os
 import pathlib as p
 import tempfile
-from typing import List, Tuple, Dict, Any
+from contextlib import contextmanager
+from typing import List, Tuple, Dict, Any, Generator
 
 import paramiko as pa
 from paramiko import SSHException, AuthenticationException
@@ -67,15 +69,17 @@ def get_command_output(server_settings: ServerSettings, command: str) -> List[st
                         username=server_settings.user,
                         password=server_settings.password)
             stdin, stdout, stderr = ssh.exec_command(command)
+            # print(command, stdout)
             return [f.split("\n")[0] for f in stdout]
     except (SSHException, AuthenticationException, IOError) as e:
         raise DataReadError(e.args[0])
 
 
+@contextmanager
 def download_files(server_settings: ServerSettings,
                    remote_directory: p.PurePath,
                    local_directory=p.Path(tempfile.gettempdir()),
-                   path_predicate=lambda x: True) -> List[FileWithStat]:
+                   path_predicate=lambda x: True) -> Generator[List[FileWithStat], None, None]:
     """
     サーバ上からファイルをダウンロードする
     Args:
@@ -90,6 +94,7 @@ def download_files(server_settings: ServerSettings,
     Raises:
         DataReadError: 接続失敗
     """
+    downloaded_files: List[FileWithStat] = []
     try:
         with pa.SSHClient() as ssh:
             ssh.set_missing_host_key_policy(pa.AutoAddPolicy())
@@ -108,7 +113,11 @@ def download_files(server_settings: ServerSettings,
                     sftp.get(remote_file_name, local_file)
                     file_stat: pa.SFTPAttributes = sftp.stat(remote_file_name)
                     downloaded_files.append((local_file, file_stat))
-                return downloaded_files
+                yield downloaded_files
 
     except (SSHException, AuthenticationException, IOError) as e:
         raise DataReadError(e.args[0])
+    finally:
+        for file, _ in downloaded_files:
+            if file.is_file():
+                os.remove(file)

@@ -1,9 +1,15 @@
+"""
+Weatherモジュール
+
+気象データを扱う。
+"""
+from __future__ import annotations
 from datetime import datetime, tzinfo
 import math
 from typing import Union, Dict, List
+
 from .Server import get_command_output, ServerSettings
-from . import Log
-from .Utility import round_float
+from .Utility import round_float, datetime2doy_string, datetime2time_string, time_string2datetime
 
 WeatherData = Union[str, int, float, bool, datetime]
 Weather = Dict[str, WeatherData]
@@ -41,23 +47,31 @@ def out_items() -> List[str]:
 
 
 def wind_direction2octas(direction_degree: float) -> str:
-    if direction_degree >= 360 or direction_degree < 0:
+    """
+    風向の角度から八方位にする。
+    Args:
+        direction_degree(float): 風向の方位角(度)。北を0°としたCW方向。
+
+    Returns:
+        八方位の文字列(str)
+    """
+    if direction_degree >= 360.0 or direction_degree < 0.0:
         direction_degree = direction_degree \
-            - math.floor(direction_degree / 360) * 360
+            - float(math.floor(direction_degree / 360.0 + 1.e-8)) * 360.0
     direction_degree_shift = direction_degree + 360.0 / 16.0
-    if direction_degree_shift < 45:
+    if direction_degree_shift < 45.0:
         return 'N'
-    if direction_degree_shift < 90:
+    if direction_degree_shift < 90.0:
         return 'NE'
-    if direction_degree_shift < 135:
+    if direction_degree_shift < 135.0:
         return 'E'
-    if direction_degree_shift < 180:
+    if direction_degree_shift < 180.0:
         return 'SE'
-    if direction_degree_shift < 225:
+    if direction_degree_shift < 225.0:
         return 'S'
-    if direction_degree_shift < 270:
+    if direction_degree_shift < 270.0:
         return 'SW'
-    if direction_degree_shift < 315:
+    if direction_degree_shift < 315.0:
         return 'W'
     return 'NW'
 
@@ -77,8 +91,8 @@ def get_data(time: datetime, server_settings: ServerSettings, keywords=None) -> 
 
 
 def make_query_command(time: datetime) -> str:
-    date_string: str = Log.datetime2doy_string(time)
-    time_string: str = Log.datetime2time_string(time)[0:-2]
+    date_string: str = datetime2doy_string(time)
+    time_string: str = datetime2time_string(time)[0:-2]
     return 'ssh clock -f "grep ' + time_string + ' /usr2/log/days/' \
         + date_string + '/' + date_string + '.WS.log |grep -v SPDNOW"'
 
@@ -90,7 +104,7 @@ def get_log_lines(time: datetime, server_settings: ServerSettings) -> List[str]:
 def make_data(time: datetime, server_settings: ServerSettings) -> List[Weather]:
     def convert_value(item: str, value) -> WeatherData:
         if item == 'time':
-            return Log.time_string2datetime(value)
+            return time_string2datetime(value)
         if item == 'rain_flag':
             if float(value) == 0:
                 return False

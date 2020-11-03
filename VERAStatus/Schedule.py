@@ -6,12 +6,11 @@ Scheduleモジュール
 """
 from __future__ import annotations
 import dataclasses
-import os
 from datetime import datetime
 from typing import List, Dict, Any
 
 from .ObservationInfo import ObservationInfo
-from .Server import ServerSettings, FileWithStat
+from .Server import ServerSettings
 from .Vex import make_observation_info, download_files_between
 
 
@@ -30,17 +29,12 @@ def keywords() -> List[str]:
 
 def read_observations(date_from: datetime, date_until: datetime,
                       server_settings: ServerSettings) -> List[ObservationInfo]:
-    downloaded_file_paths_stat: List[FileWithStat] = \
-        download_files_between(date_from, date_until, server_settings)
-    observation_info_list: List[ObservationInfo] = \
-        [make_observation_info(*file_info) for file_info in downloaded_file_paths_stat]
-    for file_path, file_stat in downloaded_file_paths_stat:
-        os.remove(file_path)
-    return observation_info_list
+    with download_files_between(date_from, date_until, server_settings) as downloaded_file_paths_stat:
+        return [make_observation_info(*file_info) for file_info in downloaded_file_paths_stat]
 
 
 def sort_observations(obs_info_list: List[ObservationInfo]) -> List[ObservationInfo]:
-    return sorted(obs_info_list, key=lambda info: info['start_time'])
+    return sorted(obs_info_list, key=lambda info: info.start_time)
 
 
 def get_observations(date_from: datetime, date_until: datetime, server_settings: ServerSettings):

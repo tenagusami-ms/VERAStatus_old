@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, date
 import pathlib as p
-from typing import Dict, List, Union, Any, Optional, Match
+from typing import Dict, List, Union, Any, Optional, Match, Generator
 
 from .ObservationInfo import ObservationInfo
 from .Server import ServerSettings, download_files, FileStat, FileWithStat
@@ -33,7 +33,7 @@ def vex_file_keywords() -> Dict[str, str]:
 
 
 def download_files_between(date_start: datetime, date_end: datetime,
-                           server_settings: ServerSettings) -> List[FileWithStat]:
+                           server_settings: ServerSettings) -> Generator[List[FileWithStat], None, None]:
     """
     指定された期間の日の間にある観測ファイルをサーバからダウンロードし、
     それらのファイル情報を返す。
@@ -49,8 +49,10 @@ def download_files_between(date_start: datetime, date_end: datetime,
     Returns:
         ダウンロードしたファイルの情報(List[FileWithStat])
     """
-    return download_files(server_settings, server_settings.schedule_directory,
-                          path_predicate=lambda f: date_predicate(f, date_start.date(), date_end.date()))
+    downloaded_file_paths_stat: Generator[List[FileWithStat], None, None] = download_files(
+        server_settings, server_settings.schedule_directory,
+        path_predicate=lambda f: date_predicate(f, date_start.date(), date_end.date()))
+    return downloaded_file_paths_stat
 
 
 def date_predicate(file: p.PurePath, date_start: date, date_end: date) -> bool:
@@ -99,23 +101,24 @@ def extract_obs_info(vex_file_lines: List[str]) -> Dict[str, Any]:
     """
     comment_pattern = r'^\*'
     vex_lines: List[str] = [line for line in vex_file_lines
-                            if not re.match(comment_pattern, line)]
-    key_values: List[List[str]] = [[key_value.strip().strip(";") for key_value
+                            if not re.match(comment_pattern, line) and "=" in line]
+    key_values: List[List[str]] = [[key_value.strip().strip(";").strip() for key_value
                                     in line.strip().split("=", 1)]
                                    for line in vex_lines]
     return {key: value for key, value in key_values if key in vex_file_keywords().values()}
 
 
-def time_string2datetime(time_string: str) -> datetime:
+def vex_time2datetime(time_string: str) -> datetime:
     """
-    vexファイル内の時刻記述をdatetimeオブジェクトに変換
+    UTC時刻文字列をdatetimeにする。
+    例えば20201026012345をdatetime(2020, 10, 26, 1, 23, 45, {UTC})にする。
     Args:
-        time_string(str): UTCでの時刻記述。例えば"2020y123d08h12m34s"
+        time_string(str): UTC時刻文字列
 
     Returns:
         datetimeオブジェクト(datetime.datetime)
     """
-    return datetime.strptime(time_string + "+0000", '%Yy%jd%Hh%Mm%Ss%z')
+    return datetime.strptime(time_string + "+0000", "%Yy%jd%Hh%Mm%Ss%z")
 
 
 def vex_lines2observation_info(obs_info_lines: Dict[str, Any],
@@ -131,10 +134,9 @@ def vex_lines2observation_info(obs_info_lines: Dict[str, Any],
     """
     def convert_value(vex_key: str) -> Union[str, datetime]:
         if vex_key == 'exper_nominal_start' or vex_key == 'exper_nominal_stop':
-            return time_string2datetime(obs_info_lines[vex_key])
+            return vex_time2datetime(obs_info_lines[vex_key])
         elif vex_key == 'ref $IF':
-            matched: Optional[Match[str]] = \
-                re.search(r"^IF_([\w]+):", obs_info_lines[vex_key])
+            matched: Optional[Match[str]] = re.search(r"^IF_([\w]+):", obs_info_lines[vex_key])
             if matched is None:
                 return "unknown"
             return matched.groups()[0]
@@ -142,13 +144,13 @@ def vex_lines2observation_info(obs_info_lines: Dict[str, Any],
 
     observation_info_dict: Dict[str, Any] = \
         {observation_key: convert_value(vex_key)
-         for observation_key, vex_key in vex_file_keywords()}
+         for observation_key, vex_key in vex_file_keywords().items()}
     observation_info_dict["timestamp"] = datetime.fromtimestamp(file_stat.st_mtime, tz=UTC)
-    add_names(observation_info_dict)
+    correct_names(observation_info_dict)
     return ObservationInfo(**observation_info_dict)
 
 
-def add_names(observation_info_dict: Dict[str, Any]) -> None:
+def correct_names(observation_info_dict: Dict[str, Any]) -> None:
     """
     観測情報辞書にPI情報がない（＝元のスケジュールに書いてない）などの
     特殊ケースへの対応のため、観測情報辞書のPI, コンタクト情報を修正する。

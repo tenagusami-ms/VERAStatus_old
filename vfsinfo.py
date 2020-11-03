@@ -2,14 +2,14 @@
     vfsinfo.py : test for vfs data acquisition
 
 Usage:
-    vfsinfo.py [--date YYYYJJJ] [--setting file]
+    vfsinfo.py [-d YYYYJJJ | --date YYYYJJJ] [-s file | --setting file]
 
     vfsinfo.py -h | --help
 
 Options:
-    --date YYYYJJJ  : doy JJJ in year YYYY for data acquisition.
-    --setting file  : the path to the setting file
-    -h --help       : Show this screen and exit.
+    -d, --date YYYYJJJ  : doy JJJ in year YYYY for data acquisition.
+    -s, --setting file     : the path to the setting file
+    -h --help          : Show this screen and exit.
 
 """
 from __future__ import annotations

@@ -1,10 +1,9 @@
 from datetime import datetime
-import os
+import pathlib as p
 from typing import List
-from . import Log
 from . import Server as Serv
 from .Server import ServerSettings
-from .Utility import round_float
+from .Utility import round_float, time_string2datetime
 from .Weather import get_data, Weather
 
 
@@ -61,7 +60,12 @@ def info_list2lines_list(info_list):
     return [info2lines(info) for info in info_list]
 
 
-def display(lines_list):
+def display(lines_list: List[List[str]]) -> None:
+    """
+    secZ測定ごとのデータをディスプレイ出力
+    Args:
+        lines_list(List[List[str]]): 各測定ごとの出力リスト
+    """
     print('===========\n  sec Z\n===========')
     if not lines_list:
         print('no sec Z data')
@@ -73,12 +77,28 @@ def display(lines_list):
             print('-----------')
 
 
-def remote_dir(today):
-    return '/usr2/log/days' + '/' + today.strftime('%Y%j')
+def remote_directory(date_time: datetime) -> p.PurePath:
+    """
+    リモートディレクトリのパス
+    Args:
+        date_time(datetime.datetime): 日
+
+    Returns:
+        パス(pathlib.PurePosixPath)
+    """
+    return p.PurePosixPath("/") / "usr2" / "log" / "days" / date_time.strftime('%Y%j')
 
 
-def remote_file_name(today):
-    return today.strftime('%Y%j') + '.SECZ.log'
+def remote_file_name(date_time: datetime) -> str:
+    """
+    リモートディレクトリのパス
+    Args:
+        date_time(datetime.datetime): 日
+
+    Returns:
+        ファイル名(str)
+    """
+    return date_time.strftime('%Y%j') + '.SECZ.log'
 
 
 def make_data(line: List[str]) -> Weather:
@@ -93,7 +113,7 @@ def make_data(line: List[str]) -> Weather:
         keyword: convert_value(keyword, value)
         for (keyword, value) in zip(keywords(), line[2].split())
     }
-    data_dict_tmp['time'] = Log.time_string2datetime(line[0])
+    data_dict_tmp['time'] = time_string2datetime(line[0])
     return {
         keyword: value
         for keyword, value in data_dict_tmp.items()
@@ -101,19 +121,16 @@ def make_data(line: List[str]) -> Weather:
     }
 
 
-def read(today: datetime, server_settings: ServerSettings):
-    try:
-        file_name: str = remote_file_name(today)
-        file_path, file_stat = Serv.download_files(
-            server_settings, remote_dir(today),
-            path_predicate=lambda fname: fname == file_name)[0]
-    except (RuntimeError, IndexError):
-        return []
+def read(date_time: datetime, server_settings: ServerSettings) -> List[Weather]:
+    file_name: str = remote_file_name(date_time)
+    with Serv.download_files(
+            server_settings, remote_directory(date_time),
+            path_predicate=lambda fname: fname.name == file_name) as downloaded_file_path_stat:
+        file_path, file_stat = next(iter(downloaded_file_path_stat))
 
-    data_keyword: str = 'TSYS1'
-    with open(file_path, 'r') as f:
-        lines: List[List[str]] = [[
-            key_value.strip().strip(";") for key_value in line.strip().split("/")
-        ] for line in f.readlines() if data_keyword in line]
-    os.remove(file_path)
-    return [make_data(line) for line in lines]
+        data_keyword: str = "TSYS1"
+        with open(file_path, mode="r") as f:
+            lines: List[List[str]] = [[
+                key_value.strip().strip(";") for key_value in line.strip().split("/")
+            ] for line in f.readlines() if data_keyword in line]
+        return [make_data(line) for line in lines]

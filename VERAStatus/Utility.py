@@ -161,6 +161,32 @@ def doy_string2datetime(doy_string: str) -> datetime:
     return datetime.strptime(doy_string + '000000+0000', '%Y%j%H%M%S%z')
 
 
+def time_string2datetime(time_string: str) -> datetime:
+    """
+    UTC時刻文字列をdatetimeにする。
+    例えば20201026012345をdatetime(2020, 10, 26, 1, 23, 45, {UTC})にする。
+    Args:
+        time_string(str): UTC時刻文字列
+
+    Returns:
+        datetimeオブジェクト(datetime.datetime)
+    """
+    return datetime.strptime(time_string + "+0000", "%Y%j%H%M%S%z")
+
+
+def datetime2time_string(date_time: datetime) -> str:
+    """
+    datetimeオブジェクトをUTC時刻文字列にする。
+    例えばdatetime(2020, 10, 26, 1, 23, 45, {UTC})を"20201026012345"にする。
+    Args:
+        date_time(datetime.datetime): datetimeオブジェクト
+
+    Returns:
+        UTC時刻文字列(str)
+    """
+    return date_time.astimezone(tz=UTC).strftime('%Y%j%H%M%S')
+
+
 def datetime2year_doy_string(date_time: datetime) -> Tuple[str, str]:
     """
     datetimeオブジェクトから、そのオブジェクトの時刻が入る、年と通日の文字列を返す。
