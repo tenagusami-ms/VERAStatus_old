@@ -162,6 +162,6 @@ def get_status(settings: MaserSettings, date_from, date_until, step_interval=10)
 
 def report_parameters():
     report_params = \
-        filter(lambda x: x.get('daily_report_index') is not None,
+        filter(lambda x: x.secz_1day('daily_report_index') is not None,
                status_parameters())
     return sorted(report_params, key=lambda x: x['daily_report_index'])

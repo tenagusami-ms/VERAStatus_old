@@ -5,6 +5,7 @@ Utilityモジュール
 """
 from __future__ import annotations
 import json
+import math
 import re
 from datetime import timezone, tzinfo, timedelta, datetime
 from decimal import Decimal, ROUND_HALF_UP
@@ -267,3 +268,33 @@ def async_execution(tasks):
     future = asyncio.gather(*tasks)
     loop.run_until_complete(future)
     return future.result()
+
+
+def wind_direction2octas(direction_degree: float) -> str:
+    """
+    風向の角度から八方位にする。
+    Args:
+        direction_degree(float): 風向の方位角(度)。北を0°としたCW方向。
+
+    Returns:
+        八方位の文字列(str)
+    """
+    if direction_degree >= 360.0 or direction_degree < 0.0:
+        direction_degree = direction_degree \
+            - float(math.floor(direction_degree / 360.0 + 1.e-8)) * 360.0
+    direction_degree_shift = direction_degree + 360.0 / 16.0
+    if direction_degree_shift < 45.0:
+        return 'N'
+    if direction_degree_shift < 90.0:
+        return 'NE'
+    if direction_degree_shift < 135.0:
+        return 'E'
+    if direction_degree_shift < 180.0:
+        return 'SE'
+    if direction_degree_shift < 225.0:
+        return 'S'
+    if direction_degree_shift < 270.0:
+        return 'SW'
+    if direction_degree_shift < 315.0:
+        return 'W'
+    return 'NW'

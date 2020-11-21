@@ -28,6 +28,7 @@ import VERAStatus.SecZ as SecZ
 from VERAStatus.Query import get_status_today_synchronous
 from VERAStatus.Server import ServerSettings, server_settings_dict2settings
 from VERAStatus.Utility import DataReadError, read_json, Error
+from VERAStatus.VERAStatus import VERAStatus
 
 
 def main() -> None:
@@ -40,10 +41,11 @@ def main() -> None:
             server_settings_dict2settings(read_json(options.setting_file)["VLBI"])
         today: datetime = options.date
         # # info = q.get_status_today(today)
-        info = get_status_today_synchronous(today, server_setting)
+        status: VERAStatus = get_status_today_synchronous(today, server_setting)
 
-        Sched.display(Sched.info_list2lines_list(info['observation_info']))
-        SecZ.display(SecZ.info_list2lines_list(info['secZ_info']))
+        Sched.display_schedule(status.observations)
+        SecZ.display_secz(status.secZ_list)
+
     except Error as e:
         print(e.args[0])
         sys.exit(1)

@@ -5,11 +5,11 @@ from typing import List, Dict, Any, Generator
 
 import pytest
 
-from VERAStatus.ObservationInfo import ObservationInfo
 from VERAStatus.Server import FileStat
 from VERAStatus.Utility import UTC
-from VERAStatus.Vex import time_string2datetime, date_predicate, correct_names, extract_obs_info, \
-    vex_lines2observation_info
+from VERAStatus.VERAStatus import ObservationInfo
+from VERAStatus.Vex import date_predicate, correct_names, extract_obs_info, \
+    vex_lines2observation_info, vex_time2datetime
 
 
 @pytest.fixture
@@ -93,10 +93,6 @@ def test_date_predicate(observation_id: p.PurePath, start_date: List[int],
     assert date_predicate(observation_id, date(*start_date), date(*end_date)) == expected
 
 
-def test_time_string2datetime():
-    assert time_string2datetime("2020y300d01h23m45s") == datetime(2020, 10, 26, 1, 23, 45, tzinfo=UTC)
-
-
 def test_correct_names():
     names1: Dict[str, Any] = {"PI_name": "pi1", "contact_name": None}
     correct_names(names1)
@@ -128,3 +124,8 @@ def test_vex_lines2observation_info(vex_dict_example1, vex_dict_example2):
            ObservationInfo("r20290a", "OH26.2-0 and IRC+2040", datetime(2020, 10, 16, 4, 45, 0, tzinfo=UTC),
                            datetime(2020, 10, 16, 13, 5, 0, tzinfo=UTC), "Nakagawa", "Nakagawa", "C67",
                            datetime.fromtimestamp(file_stat.st_mtime, tz=UTC))
+
+
+def test_vex_time2datetime():
+    assert vex_time2datetime("2020y300d01h23m45s") == \
+           datetime(2020, 10, 26, 1, 23, 45, tzinfo=UTC)

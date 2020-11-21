@@ -10,9 +10,9 @@ from datetime import datetime, date
 import pathlib as p
 from typing import Dict, List, Union, Any, Optional, Match, Generator
 
-from .ObservationInfo import ObservationInfo
 from .Server import ServerSettings, download_files, FileStat, FileWithStat
 from .Utility import UTC
+from .VERAStatus import ObservationInfo
 
 
 def vex_file_keywords() -> Dict[str, str]:

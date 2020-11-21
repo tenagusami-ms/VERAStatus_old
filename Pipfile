@@ -7,10 +7,14 @@ verify_ssl = true
 
 [packages]
 docopt = "*"
-schema = "*"
+schema = "==0.7.3"
 openpyxl = "*"
 paramiko = "*"
 pytest = "*"
+toml = "==0.10.2"
+tox = "*"
+pip = "==20.2.4"
+setuptools = "==50.3.2"
 
 [requires]
 python_version = "3.8"
