@@ -75,6 +75,8 @@ def require_weather_list(server_settings: ServerSettings, date_time_list: List[d
     Returns:
         気象データリスト(List[Weather])
     """
+    if len(date_time_list) == 0:
+        return list()
     lines_raw: List[List[str]] = \
         [line.split() for line
          in get_command_output(

@@ -8,11 +8,11 @@ __all__ = ["require_secz"]
 
 from datetime import datetime
 import pathlib as p
-from typing import List, Tuple
+from typing import List, Tuple, Union, Generator
 
 from . import Server as Serv
-from .Log import extract_lines
-from .Server import ServerSettings
+from .Log import extract_lines, line2data
+from .Server import ServerSettings, get_command_output
 from .VERAStatus import SecZData
 from .Weather import Weather, require_weather_list
 
@@ -103,3 +103,86 @@ def data2secz(date_time: datetime, data_str_line: str, weather: Weather) -> SecZ
                     data_str[5],
                     data_str[6],
                     weather)
+
+
+def secz_query_command(date_time: datetime) -> str:
+    """
+    指定された日時を含む日のSecZ測定結果の問い合わせコマンド
+    Args:
+        date_time: 日時
+
+    Returns:
+        SecZ問い合わせコマンド(str)
+    """
+    data_keyword: str = "TSYS1"
+    date_str: str = date_time.strftime("%Y%j")
+    return rf"grep {data_keyword} /usr2/log/days/{date_str}/{date_str}.SECZ.log"
+
+
+def acquire_secz_data(date_time: datetime, server_settings: ServerSettings
+                      ) -> Generator[List[Union[datetime, str, float]], None, None]:
+    """
+    指定された日時を含む日のSecZ測定結果リスト
+    Args:
+        date_time(datetime.datetime): 日時
+        server_settings(ServerSettings): サーバ設定
+
+    Yields:
+        測定結果リスト
+    """
+    for line in get_command_output(server_settings, secz_query_command(date_time)):
+        date_time, _, data_str = line2data(line)
+        yield [date_time, float(data_str[0]), float(data_str[1]), float(data_str[2]),
+               float(data_str[3]), float(data_str[4]), data_str[5], data_str[6]]
+    # data_line: List[Tuple[datetime, str, List[str]]] =\
+    #     [line2data(line) for line in get_command_output(server_settings, secz_query_command(date_time))]
+
+
+def assemble_secz_data() -> Generator[None, Union[List[Union[datetime, str, float]], Weather], SecZData]:
+    """
+    secZオブジェクトを組み立てるコルーチン
+    Returns:
+        secZオブジェクト(SecZData)
+    """
+    secz_data_list: List[Union[datetime, str, float, Weather]] = yield
+    weather_data: Weather = yield
+    secz_data_list.append(weather_data)
+    return SecZData(*secz_data_list)
+
+
+def generate_secz(date_time: datetime, server_settings: ServerSettings
+                  ) -> List[SecZData]:
+    """
+    指定された日時を含む日のSecZオブジェクト
+    Args:
+        date_time(datetime.datetime): 日時
+        server_settings(ServerSettings): サーバ設定
+
+    Returns:
+
+    """
+    date_time_list: List[datetime] = list()
+    secz_makers: List[Generator[None, Union[List[Union[datetime, str, float]], Weather], SecZData]] = list()
+
+    for secz_data_list in acquire_secz_data(date_time, server_settings):
+        secz_maker: Generator[None, Union[List[Union[datetime, str, float]], Weather], SecZData] =\
+            assemble_secz_data()
+        # secz_maker: Generator[None, Union[List[Union[datetime, str, float]], Weather], SecZData] = secz_maker_factory()
+        next(secz_maker)
+        secz_maker.send(secz_data_list)
+        date_time_list.append(secz_data_list[0])
+        secz_makers.append(secz_maker)
+
+    secz_list: List[SecZData] = list()
+    for weather, secz_maker in zip(require_weather_list(server_settings, date_time_list), secz_makers):
+        try:
+            secz_maker.send(weather)
+            # secz_maker.send(None)
+        except StopIteration as e:
+            secz_list.append(e.value)
+
+    return secz_list
+
+
+def secz_maker_factory() -> Generator[None, Union[List[Union[datetime, str, float]], Weather], SecZData]:
+    yield from assemble_secz_data()

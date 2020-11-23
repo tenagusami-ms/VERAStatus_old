@@ -9,7 +9,7 @@ __all__ = ["VERAStatus", "ObservationInfo", "Observations", "Weather", "SecZData
 import dataclasses
 from datetime import datetime
 from functools import total_ordering
-from typing import List
+from typing import List, Generator, Optional
 
 from VERAStatus.Utility import JST, wind_direction2octas
 
@@ -43,7 +43,7 @@ class ObservationInfo:
                f"timestamp: {datetime2display_time(self.timestamp)}\n"
 
 
-Observations = List[ObservationInfo]
+Observations = Generator[Optional[ObservationInfo], None, None]
 
 
 @dataclasses.dataclass(frozen=True)

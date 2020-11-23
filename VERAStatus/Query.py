@@ -30,8 +30,10 @@ def get_status_today(today: datetime, server_settings: ServerSettings) -> VERASt
 
 
 def get_status_today_synchronous(today: datetime, server_settings: ServerSettings) -> VERAStatus:
+    # return VERAStatus(Sched.get_observations(today, incremented_day(today), server_settings),
+    #                  SecZ.require_secz(today, server_settings))
     return VERAStatus(Sched.get_observations(today, incremented_day(today), server_settings),
-                      SecZ.require_secz(today, server_settings))
+                      SecZ.generate_secz(today, server_settings))
 
 
 def get_status_synchronous(date_from: datetime, date_until: datetime,
