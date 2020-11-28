@@ -6,11 +6,13 @@ Scheduleモジュール
 """
 from __future__ import annotations
 from datetime import datetime
+import pathlib as p
 from typing import List
 
 from .Server import ServerSettings
-from .VERAStatus import Observations
-from .Vex import make_observation_info, download_files_between
+from .VERAStatus import Observations, ObservationInfo
+from .Vex import make_observation_info, download_files_between, schedule_files_between,\
+    schedule_file2observation_info
 
 
 def keywords() -> List[str]:
@@ -26,8 +28,8 @@ def keywords() -> List[str]:
     ]
 
 
-def read_observations(date_from: datetime, date_until: datetime,
-                      server_settings: ServerSettings) -> Observations:
+def read_observations_old(date_from: datetime, date_until: datetime,
+                          server_settings: ServerSettings) -> Observations:
     """
     指定期間を含む日の観測情報
     Args:
@@ -46,16 +48,29 @@ def read_observations(date_from: datetime, date_until: datetime,
                 yield make_observation_info(*file_info)
 
 
-# def sort_observations(obs_info_list: Observations) -> Observations:
-#     return sorted(obs_info_list, key=lambda info: info.start_time)
+def read_observations(date_from: datetime, date_until: datetime,
+                      server_settings: ServerSettings) -> List[ObservationInfo]:
+    """
+    指定期間を含む日の観測情報
+    Args:
+        date_from(datetime.datetime): 開始日時
+        date_until(datetime.datetime): 終了日時
+        server_settings(ServerSettings): サーバ設定
+
+    Returns:
+        観測情報(Observations)
+    """
+    schedule_files: List[p.PurePath] = schedule_files_between(
+        date_from, date_until, server_settings)
+    return [schedule_file2observation_info(server_settings, file)
+            for file in schedule_files]
 
 
 def get_observations(date_from: datetime, date_until: datetime,
-                     server_settings: ServerSettings) -> Observations:
-    obs_info_list: Observations =\
+                     server_settings: ServerSettings) -> List[ObservationInfo]:
+    obs_info_list: List[ObservationInfo] =\
         read_observations(date_from, date_until, server_settings)
-    # return sort_observations(obs_info_list)
-    return obs_info_list
+    return sorted(obs_info_list)
 
 
 def display_schedule(observations: Observations) -> None:

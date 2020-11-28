@@ -10,8 +10,8 @@ from datetime import datetime, date
 import pathlib as p
 from typing import Dict, List, Union, Any, Optional, Match, Generator
 
-from .Server import ServerSettings, download_files, FileStat, FileWithStat
-from .Utility import UTC
+from .Server import ServerSettings, download_files, FileStat, FileWithStat, get_command_output
+from .Utility import UTC, egrep_command
 from .VERAStatus import ObservationInfo
 
 
@@ -55,6 +55,29 @@ def download_files_between(date_start: datetime, date_end: datetime,
     return downloaded_file_paths_stat
 
 
+def schedule_files_between(date_start: datetime, date_end: datetime,
+                           server_settings: ServerSettings) -> List[p.PurePath]:
+    """
+    サーバにある、指定された期間の日の間にある観測ファイルのリスト
+
+    Note:
+        date_end(期間終了日)は含まない。
+
+    Args:
+        date_start(datetime.datetime): 期間開始日の任意の時刻
+        date_end(datetime.datetime): 期間終了日の任意の時刻
+        server_settings(ServerSettings): サーバ設定
+
+    Returns:
+        スケジュールファイルリスト(List[pathlib.PurePath])
+    """
+    files: List[p.PurePath] = \
+        [server_settings.schedule_directory / path for path
+         in get_command_output(server_settings, f"ls {server_settings.schedule_directory}")
+         if date_predicate(p.PurePosixPath(path), date_start.date(), date_end.date())]
+    return files
+
+
 def date_predicate(file: p.PurePath, date_start: date, date_end: date) -> bool:
     """
     観測ファイル名からわかる観測開始日が、指定された期間の日の間にあるかどうか
@@ -90,6 +113,9 @@ def make_observation_info(vex_file: p.Path, file_stat: FileStat) -> ObservationI
     return vex_lines2observation_info(obs_info_lines, file_stat)
 
 
+# def receive_observation_info()
+
+
 def extract_obs_info(vex_file_lines: List[str]) -> Dict[str, Any]:
     """
     vexファイルの行リストから、必要な観測情報が含まれる行の、キー・値の辞書を抜き出す。
@@ -122,16 +148,17 @@ def vex_time2datetime(time_string: str) -> datetime:
 
 
 def vex_lines2observation_info(obs_info_lines: Dict[str, Any],
-                               file_stat: FileStat) -> ObservationInfo:
+                               file_stat=None) -> ObservationInfo:
     """
     スケジュールから抜き出した観測情報辞書を、観測情報オブジェクトにする。
     Args:
         obs_info_lines(Dict[str, Any]): 観測情報辞書
-        file_stat(FileStat): スケジュールファイル情報
+        file_stat(FileStat, optional): スケジュールファイル情報
 
     Returns:
         観測情報(ObservationInfo)
     """
+
     def convert_value(vex_key: str) -> Union[str, datetime]:
         if vex_key == 'exper_nominal_start' or vex_key == 'exper_nominal_stop':
             return vex_time2datetime(obs_info_lines[vex_key])
@@ -145,9 +172,31 @@ def vex_lines2observation_info(obs_info_lines: Dict[str, Any],
     observation_info_dict: Dict[str, Any] = \
         {observation_key: convert_value(vex_key)
          for observation_key, vex_key in vex_file_keywords().items()}
-    observation_info_dict["timestamp"] = datetime.fromtimestamp(file_stat.st_mtime, tz=UTC)
+    if file_stat is not None:
+        observation_info_dict["timestamp"] =\
+            datetime.fromtimestamp(file_stat.st_mtime, tz=UTC)
+    else:
+        observation_info_dict["timestamp"] = None
     correct_names(observation_info_dict)
     return ObservationInfo(**observation_info_dict)
+
+
+def schedule_file2observation_info(server_settings: ServerSettings,
+                                   schedule_file: p.PurePath) -> ObservationInfo:
+    """
+    サーバ上のスケジュールファイルの内容を取得して観測情報にする
+    Args:
+        server_settings(ServerSettings): サーバ設定
+        schedule_file(pathlib.PurePath): スケジュールファイルのサーバ上のパス
+
+    Returns:
+        観測情報(ObservationInfo)
+    """
+    lines: List[str] = get_command_output(
+        server_settings,
+        egrep_command(schedule_file, list(vex_file_keywords().values())))
+    obs_info_lines: Dict[str, Any] = extract_obs_info(lines)
+    return vex_lines2observation_info(obs_info_lines)
 
 
 def correct_names(observation_info_dict: Dict[str, Any]) -> None:

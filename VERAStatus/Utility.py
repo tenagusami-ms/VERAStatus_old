@@ -10,6 +10,7 @@ import re
 from datetime import timezone, tzinfo, timedelta, datetime
 from decimal import Decimal, ROUND_HALF_UP
 from functools import reduce
+import pathlib as p
 from typing import Tuple, List, TypeVar, Dict, Any, Union
 import asyncio
 
@@ -298,3 +299,50 @@ def wind_direction2octas(direction_degree: float) -> str:
     if direction_degree_shift < 315.0:
         return 'W'
     return 'NW'
+
+
+def egrep_or_str(or_string_list: List[str]) -> str:
+    """
+    egrepコマンドでor検索をするときの"|"区切り文字列
+    Args:
+        or_string_list:
+
+    Returns:
+
+    """
+    start_string: str = or_string_list[0]
+    if len(or_string_list) == 1:
+        return start_string
+    return reduce(lambda ss, s: ss + f'|{s}', or_string_list[1:], start_string)
+
+
+def egrep_command_remote_remote(file: p.PurePath, or_str: Union[str, List[str]]) -> str:
+    """
+    リモートサーバからさらにリモートのサーバ上のファイルの問い合わせをするときの、
+    egrepによるファイル内の文字列検索コマンドの生成
+    Args:
+        file(pathlib.PurePath: 対象ファイル
+        or_str(Union[str, List[str]]): 検索文字列、またはor検索をしたい文字列リスト
+
+    Returns:
+         検索コマンド
+    """
+    if type(or_str) is str:
+        return f"egrep {or_str} {str(file)}"
+    return rf'egrep "\"{egrep_or_str(or_str)}"\" {str(file)}'
+
+
+def egrep_command(file: p.PurePath, or_str: Union[str, List[str]]) -> str:
+    """
+    リモートサーバ上のファイルの問い合わせをするときの、
+    egrepによるファイル内の文字列検索コマンドの生成
+    Args:
+        file(pathlib.PurePath: 対象ファイル
+        or_str(Union[str, List[str]]): 検索文字列、またはor検索をしたい文字列リスト
+
+    Returns:
+         検索コマンド
+    """
+    if type(or_str) is str:
+        return f"egrep {or_str} {str(file)}"
+    return rf'egrep "{egrep_or_str(or_str)}" {str(file)}'

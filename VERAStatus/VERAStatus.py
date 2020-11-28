@@ -20,6 +20,7 @@ class VERAStatus:
     secZ_list: List[SecZData]  # secZ information
 
 
+@total_ordering
 @dataclasses.dataclass(frozen=True)
 class ObservationInfo:
     observation_ID: str  # 観測名
@@ -31,16 +32,30 @@ class ObservationInfo:
     band: str  # 観測バンド
     timestamp: datetime  # スケジュールファイルの最終更新時刻
 
+    def __eq__(self, other):
+        if not isinstance(other, ObservationInfo):
+            return NotImplemented
+        return self.start_time == other.start_time
+
+    def __lt__(self, other):
+        if not isinstance(other, ObservationInfo):
+            return NotImplemented
+        return self.start_time < other.start_time
+
+
     @property
     def output_str(self) -> str:
+        if self.timestamp is None:
+            timestamp_string: str = ""
+        else:
+            timestamp_string: str = f"timestamp: {datetime2display_time(self.timestamp)}\n"
         return f"observation ID: {self.observation_ID}\n" \
                f"description: {self.description}\n" \
                f"start time: {datetime2display_time(self.start_time)}\n" \
                f"end time: {datetime2display_time(self.end_time)}\n" \
                f"PI name: {self.PI_name}\n" \
                f"contact name: {self.contact_name}\n" \
-               f"band: {self.band}\n" \
-               f"timestamp: {datetime2display_time(self.timestamp)}\n"
+               f"band: {self.band}\n" + timestamp_string
 
 
 Observations = Generator[Optional[ObservationInfo], None, None]

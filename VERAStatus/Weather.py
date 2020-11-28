@@ -4,16 +4,16 @@ Weatherモジュール
 気象データを扱う。
 """
 from __future__ import annotations
+
 __all__ = ["Weather", "require_weather_list", "log_file_weather_server",
            "query_command_weather_server"]
 
 from datetime import datetime
 import pathlib as p
-from functools import reduce
 from typing import Dict, List
 
 from .Server import get_command_output, ServerSettings
-from .Utility import datetime2doy_string, datetime2time_string
+from .Utility import datetime2doy_string, datetime2time_string, egrep_command_remote_remote
 
 from .VERAStatus import Weather
 
@@ -40,15 +40,9 @@ def query_command_weather_server(date_time_list: List[datetime]) -> str:
     Returns:
         コマンド(str)
     """
-    def egrep_or_str() -> str:
-        start_string: str = time_str_list[0]
-        if len(time_str_list) == 1:
-            return start_string
-        return reduce(lambda ss, s: ss + f'|{s}', time_str_list[1:], start_string)
-
     time_str_list: List[str] = [datetime2time_string(date_time) for date_time in date_time_list]
-    return rf'egrep "\"{egrep_or_str()}"\" '\
-           + rf'{str(log_file_weather_server(date_time_list[0]))} | grep -v \;'
+    return egrep_command_remote_remote(
+        log_file_weather_server(date_time_list[0]), time_str_list) + rf" | grep -v \;"
 
 
 def uniq_lines(lines_raw: List[List[str]]) -> List[List[str]]:
